@@ -1,7 +1,9 @@
 import streamlit as st
 from datetime import datetime
+import os
+import json
+import tempfile
 import io
-from decimal import Decimal, ROUND_HALF_UP
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
 from reportlab.pdfgen import canvas
@@ -14,28 +16,7 @@ st.set_page_config(
     layout="centered"
 )
 
-# ============================================================================
-# FUNCIONES DE REDONDEO (CORRECTAS PARA HACIENDA)
-# ============================================================================
-
-def redondear_euros(cantidad):
-    """
-    Redondeo al céntimo más cercano según normativa española.
-    Usa ROUND_HALF_UP: 11.085 → 11.09, 11.084 → 11.08
-    """
-    if isinstance(cantidad, float):
-        # Convertir float a string con precisión controlada
-        cantidad = str(round(cantidad, 10))
-    
-    d = Decimal(cantidad)
-    return float(d.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
-
-
-def eur(cantidad):
-    """Formatea una cantidad como moneda Euro con redondeo correcto"""
-    return f"{redondear_euros(cantidad):.2f} €"
-
-
+# Funciones auxiliares
 def parse_number(texto):
     """Convierte texto a número, manejando comas como decimales"""
     try:
@@ -43,29 +24,9 @@ def parse_number(texto):
     except ValueError:
         return 0.0
 
-
-def calcular_con_redondeo(precio, iva, incluye_iva):
-    """
-    Calcula base imponible, cuota de IVA y precio con IVA
-    Aplicando redondeo correcto después de CADA operación
-    """
-    if incluye_iva:
-        # Precio ya incluye IVA: calculamos base imponible
-        base = redondear_euros(precio / (1 + iva / 100))
-        cuota_iva = redondear_euros(precio - base)
-        precio_con_iva = redondear_euros(precio)
-    else:
-        # Precio sin IVA: calculamos IVA y total
-        base = redondear_euros(precio)
-        cuota_iva = redondear_euros(precio * iva / 100)
-        precio_con_iva = redondear_euros(base + cuota_iva)
-    
-    return base, cuota_iva, precio_con_iva
-
-
-# ============================================================================
-# FUNCIONES PARA EL PDF
-# ============================================================================
+def eur(cantidad):
+    """Formatea una cantidad como moneda Euro"""
+    return f"{cantidad:.2f} €"
 
 def wrap_text(c, text, x, y, width_mm=120, font_name="Helvetica", font_size=10):
     """Envuelve texto en múltiples líneas y devuelve la nueva posición Y"""
@@ -89,28 +50,23 @@ def wrap_text(c, text, x, y, width_mm=120, font_name="Helvetica", font_size=10):
     
     for line in lines:
         c.drawString(x, y, line)
-        y -= 4 * mm
+        y -= 4*mm
     
     return y
 
-
 def generar_pdf_factura(emisor, datos_factura):
-    """Genera el PDF de la factura y devuelve los bytes del PDF"""
+    """Generar el PDF de la factura y devuelve los bytes del PDF"""
     buffer = io.BytesIO()
     c = canvas.Canvas(buffer, pagesize=A4)
     width, height = A4
     
-    MARGIN_X = 25 * mm
+    MARGIN_X = 20 * mm
     TOP = height - 25 * mm
     
-    # Asegurar que todos los totales están redondeados
-    base_imponible = redondear_euros(datos_factura['base_imponible'])
-    iva_total = redondear_euros(datos_factura['iva'])
-    total = redondear_euros(datos_factura['total'])
-    
-    # Encabezado
+    # Encabezado Legal Dinámico
     c.setFont("Helvetica-Bold", 14)
-    c.drawString(MARGIN_X, TOP, "FACTURA")
+    titulo_documento = "FACTURA SIMPLIFICADA" if datos_factura['tipo'] == "Simplificada" else "FACTURA"
+    c.drawString(MARGIN_X, TOP, titulo_documento)
     
     if datos_factura.get('pagada', False):
         c.setFillColor(green)
@@ -119,39 +75,37 @@ def generar_pdf_factura(emisor, datos_factura):
         c.setFillColor(black)
     
     # Datos emisor
-    y = TOP - 12 * mm
+    y = TOP - 12*mm
     c.setFont("Helvetica", 10)
     c.drawString(MARGIN_X, y, f"Emisor: {emisor['nombre']}")
-    y -= 5 * mm
+    y -= 5*mm
     c.drawString(MARGIN_X, y, f"NIF: {emisor['NIF']}")
-    y -= 5 * mm
+    y -= 5*mm
     c.drawString(MARGIN_X, y, f"Dirección: {emisor['direccion']}")
-    y -= 5 * mm
+    y -= 5*mm
     c.drawString(MARGIN_X, y, f"Email: {emisor['email']}")
     
     # Datos factura
-    y -= 8 * mm
+    y -= 8*mm
     c.setFont("Helvetica-Bold", 11)
     c.drawString(MARGIN_X, y, "Datos de la factura")
-    y -= 6 * mm
+    y -= 6*mm
     c.setFont("Helvetica", 10)
     c.drawString(MARGIN_X, y, f"Factura nº: {datos_factura['numero']}")
-    y -= 5 * mm
+    y -= 5*mm
     c.drawString(MARGIN_X, y, f"Fecha de emisión: {datos_factura['fecha_emision']}")
     
     # Datos cliente
-    y -= 8 * mm
+    y -= 8*mm
     c.setFont("Helvetica-Bold", 11)
     c.drawString(MARGIN_X, y, "Cliente")
     
-    y -= 6 * mm
+    y -= 6*mm
     c.setFont("Helvetica", 10)
     c.drawString(MARGIN_X, y, f"Nombre: {datos_factura['cliente']}")
-    
-    y -= 5 * mm
+    y -= 5*mm
     c.drawString(MARGIN_X, y, f"NIF: {datos_factura['nif_cliente']}")
-    
-    y -= 5 * mm
+    y -= 5*mm
     y = wrap_text(
         c,
         f"Dirección: {datos_factura['direccion_cliente']}",
@@ -160,26 +114,28 @@ def generar_pdf_factura(emisor, datos_factura):
         width_mm=120
     )
     
-    # Conceptos
-    y -= 8 * mm
+    # Conceptos (Reajuste de columnas para meter la cuota de IVA)
+    y -= 8*mm
     c.setFont("Helvetica-Bold", 11)
     c.drawString(MARGIN_X, y, "Conceptos")
-    y -= 6 * mm
+    y -= 6*mm
     
     c.setFont("Helvetica-Bold", 9)
     col1_x = MARGIN_X
-    col2_x = MARGIN_X + 80 * mm
-    col3_x = MARGIN_X + 110 * mm
-    col4_x = MARGIN_X + 130 * mm
+    col2_x = MARGIN_X + 65 * mm
+    col3_x = MARGIN_X + 95 * mm
+    col4_x = MARGIN_X + 115 * mm
+    col5_x = MARGIN_X + 140 * mm
     
     c.drawString(col1_x, y, "CONCEPTO")
-    c.drawString(col2_x, y, "PRECIO SIN IVA")
+    c.drawString(col2_x, y, "BASE IMP.")
     c.drawString(col3_x, y, "TIPO IVA")
-    c.drawString(col4_x, y, "PRECIO CON IVA")
+    c.drawString(col4_x, y, "CUOTA IVA")
+    c.drawString(col5_x, y, "TOTAL")
     
-    y -= 4 * mm
+    y -= 4*mm
     c.line(MARGIN_X, y, width - MARGIN_X, y)
-    y -= 4 * mm
+    y -= 4*mm
     
     c.setFont("Helvetica", 9)
     for idx, concepto in enumerate(datos_factura['conceptos']):
@@ -190,50 +146,46 @@ def generar_pdf_factura(emisor, datos_factura):
             concepto['descripcion'],
             col1_x,
             y,
-            width_mm=75,
+            width_mm=60,
             font_name="Helvetica",
             font_size=9
         )
         
         c.drawString(col2_x, original_y, eur(concepto['base']))
         c.drawString(col3_x, original_y, f"{concepto['iva']:.1f}%")
-        c.drawString(col4_x, original_y, eur(concepto['precio_con_iva']))
+        c.drawString(col4_x, original_y, eur(concepto['cuota_iva']))
+        c.drawString(col5_x, original_y, eur(concepto['precio_con_iva']))
         
-        y -= 2 * mm
+        y -= 2*mm
         if idx < len(datos_factura['conceptos']) - 1:
             c.line(MARGIN_X, y, width - MARGIN_X, y)
-            y -= 4 * mm
+            y -= 4*mm
         else:
-            y -= 2 * mm
+            y -= 2*mm
     
     # Totales
-    y -= 6 * mm
+    y -= 6*mm
     c.setFont("Helvetica-Bold", 11)
     c.drawString(MARGIN_X, y, "Importes")
-    y -= 6 * mm
+    y -= 6*mm
     c.setFont("Helvetica", 10)
-    c.drawString(MARGIN_X, y, f"Base imponible: {eur(base_imponible)}")
-    y -= 5 * mm
-    c.drawString(MARGIN_X, y, f"IVA total: {eur(iva_total)}")
-    y -= 5 * mm
+    c.drawString(MARGIN_X, y, f"Base imponible: {eur(datos_factura['base_imponible'])}")
+    y -= 5*mm
+    c.drawString(MARGIN_X, y, f"IVA total: {eur(datos_factura['cuota_iva_total'])}")
+    y -= 5*mm
     c.setFont("Helvetica-Bold", 11)
-    c.drawString(MARGIN_X, y, f"TOTAL: {eur(total)}")
+    c.drawString(MARGIN_X, y, f"TOTAL: {eur(datos_factura['total'])}")
     
     # Pie
-    y -= 12 * mm
+    y -= 12*mm
     c.setFont("Helvetica", 8)
-    c.drawString(MARGIN_X, y, "Factura")
+    c.drawString(MARGIN_X, y, f"Documento: {titulo_documento}")
     
     c.showPage()
     c.save()
     
     buffer.seek(0)
     return buffer
-
-
-# ============================================================================
-# CONFIGURACIÓN INICIAL
-# ============================================================================
 
 # Cargar datos del emisor desde secrets
 try:
@@ -251,11 +203,7 @@ except Exception as e:
 if 'conceptos' not in st.session_state:
     st.session_state.conceptos = []
 
-
-# ============================================================================
-# INTERFAZ DE USUARIO
-# ============================================================================
-
+# Título
 st.title("📄 Generador de Facturas")
 st.markdown("---")
 
@@ -271,17 +219,13 @@ st.markdown("---")
 # Datos de la factura
 col1, col2 = st.columns(2)
 with col1:
-    numero_factura = st.text_input(
-        "Número y serie de factura *",
-        help="Ej: 2024/001",
-        key="num_factura"
-    )
+    numero_factura = st.text_input("Número y serie de factura *", 
+                                   help="Ej: 2024/001",
+                                   key="num_factura")
 with col2:
-    fecha_emision = st.date_input(
-        "Fecha de emisión",
-        value=datetime.now(),
-        format="DD/MM/YYYY"
-    )
+    fecha_emision = st.date_input("Fecha de emisión", 
+                                   value=datetime.now(),
+                                   format="DD/MM/YYYY")
 
 # Datos del cliente
 st.subheader("Datos del cliente")
@@ -291,11 +235,9 @@ if tipo_factura == "Completa":
     nif_cliente = st.text_input("NIF del cliente *", key="cliente_nif")
     direccion_cliente = st.text_area("Dirección del cliente *", key="cliente_direccion")
 else:
-    cliente = st.text_input(
-        "Nombre del cliente (opcional)",
-        help="Para factura simplificada puede dejarse vacío",
-        key="cliente_nombre"
-    )
+    cliente = st.text_input("Nombre del cliente (opcional)", 
+                            help="Para factura simplificada puede dejarse vacío",
+                            key="cliente_nombre")
     nif_cliente = st.text_input("NIF del cliente (opcional)", key="cliente_nif")
     direccion_cliente = st.text_area("Dirección del cliente (opcional)", key="cliente_direccion")
 
@@ -312,39 +254,34 @@ with st.form("añadir_concepto"):
     with col1:
         descripcion = st.text_input("Descripción", key="desc_input")
     with col2:
-        precio = st.number_input(
-            "Precio (€)",
-            min_value=0.0,
-            step=0.01,
-            format="%.2f",
-            key="precio_input"
-        )
+        precio = st.number_input("Precio (€)", min_value=0.0, step=0.01, format="%.2f", key="precio_input")
     with col3:
-        iva = st.number_input(
-            "IVA (%)",
-            min_value=0.0,
-            max_value=100.0,
-            value=21.0,
-            step=1.0,
-            key="iva_input"
-        )
+        iva = st.number_input("IVA (%)", min_value=0.0, max_value=100.0, value=21.0, step=1.0, key="iva_input")
     
     incluye_iva = st.checkbox("El precio YA incluye el IVA", value=False, key="incluye_iva")
     
     submitted = st.form_submit_button("➕ Añadir concepto")
     if submitted:
         if descripcion and precio > 0:
-            # Usar la función de cálculo con redondeo correcto
-            base, cuota_iva, precio_con_iva = calcular_con_redondeo(precio, iva, incluye_iva)
+            if incluye_iva:
+                # Cálculo de dentro hacia afuera (Desglose del PVP)
+                base_real = round(precio / (1 + iva / 100), 2)
+                iva_real = round(precio - base_real, 2)
+                precio_final = precio
+            else:
+                # Cálculo tradicional
+                base_real = precio
+                iva_real = round(precio * iva / 100, 2)
+                precio_final = round(base_real + iva_real, 2)
             
             st.session_state.conceptos.append({
                 "descripcion": descripcion,
-                "precio": redondear_euros(precio),
+                "precio": precio,
                 "iva": iva,
                 "incluye_iva": incluye_iva,
-                "base": base,
-                "cuota_iva": cuota_iva,
-                "precio_con_iva": precio_con_iva
+                "base": base_real,
+                "cuota_iva": iva_real,
+                "precio_con_iva": precio_final
             })
             st.success(f"✓ Añadido: {descripcion}")
             st.rerun()
@@ -355,14 +292,14 @@ with st.form("añadir_concepto"):
 if st.session_state.conceptos:
     st.subheader("📋 Conceptos añadidos:")
     
-    # Calcular totales CON REDONDEO después de cada suma
-    base_imponible = redondear_euros(sum(c['base'] for c in st.session_state.conceptos))
-    cuota_iva_total = redondear_euros(sum(c['cuota_iva'] for c in st.session_state.conceptos))
-    total = redondear_euros(base_imponible + cuota_iva_total)
+    # Calcular totales sumando de manera precisa
+    base_imponible = round(sum(c['base'] for c in st.session_state.conceptos), 2)
+    cuota_iva_total = round(sum(c['cuota_iva'] for c in st.session_state.conceptos), 2)
+    total = round(base_imponible + cuota_iva_total, 2)
     
-    # Tabla de conceptos
+    # Tabla de conceptos en Streamlit
     for idx, concepto in enumerate(st.session_state.conceptos):
-        cols = st.columns([3, 1.5, 1, 1.5, 0.5])
+        cols = st.columns([2.5, 1.2, 1, 1.2, 1.2, 0.4])
         with cols[0]:
             st.write(concepto['descripcion'])
         with cols[1]:
@@ -370,15 +307,17 @@ if st.session_state.conceptos:
         with cols[2]:
             st.write(f"{concepto['iva']:.0f}%")
         with cols[3]:
-            st.write(eur(concepto['precio_con_iva']))
+            st.write(eur(concepto['cuota_iva']))
         with cols[4]:
+            st.write(eur(concepto['precio_con_iva']))
+        with cols[5]:
             if st.button("🗑️", key=f"del_{idx}"):
                 st.session_state.conceptos.pop(idx)
                 st.rerun()
     
     st.markdown("---")
     
-    # Totales
+    # Totales en UI
     col1, col2, col3 = st.columns(3)
     with col1:
         st.metric("Base imponible", eur(base_imponible))
@@ -387,16 +326,10 @@ if st.session_state.conceptos:
     with col3:
         st.metric("TOTAL", eur(total))
     
-    # Verificación de consistencia (base + iva debe = total)
-    suma_verificacion = redondear_euros(base_imponible + cuota_iva_total)
-    if suma_verificacion != total:
-        st.warning(f"⚠️ Nota: Verificación de redondeo - Base+IVA={eur(suma_verificacion)} vs Total={eur(total)}")
-    
     st.markdown("---")
     
     # Botón para generar factura
     if st.button("📄 Generar Factura", type="primary", use_container_width=True):
-        # Validaciones
         error = False
         if not numero_factura:
             st.error("❌ El número de factura es obligatorio")
@@ -409,8 +342,9 @@ if st.session_state.conceptos:
             error = True
         
         if not error:
-            # Preparar datos (todo redondeado)
+            # Preparar datos consistentes
             datos_factura = {
+                "tipo": tipo_factura,
                 "numero": numero_factura,
                 "fecha_emision": fecha_emision.strftime("%d/%m/%Y"),
                 "cliente": cliente if cliente else "Cliente no especificado",
@@ -418,7 +352,7 @@ if st.session_state.conceptos:
                 "direccion_cliente": direccion_cliente if direccion_cliente else "No especificada",
                 "pagada": pagada,
                 "base_imponible": base_imponible,
-                "iva": cuota_iva_total,
+                "cuota_iva_total": cuota_iva_total,
                 "total": total,
                 "conceptos": st.session_state.conceptos
             }
@@ -438,7 +372,6 @@ if st.session_state.conceptos:
                     use_container_width=True
                 )
                 
-                # Mostrar información de pago si no está pagada
                 if not pagada:
                     st.info("💡 **Información de pago:**")
                     st.markdown(f"""
@@ -446,7 +379,6 @@ if st.session_state.conceptos:
                     - **Referencia:** {numero_factura}
                     - **Total a pagar:** {eur(total)}
                     """)
-                    
                     st.warning("⚠️ Esta factura NO está marcada como pagada")
                 
             except Exception as e:
