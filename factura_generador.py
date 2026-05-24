@@ -147,7 +147,6 @@ def generar_pdf_factura(emisor, datos_factura):
         # Para factura simplificada, añadimos una nota legal
         y -= 8*mm
         c.setFont("Helvetica-Oblique", 8)
-        c.drawString(MARGIN_X, y, "* Factura simplificada - No requiere identificación del cliente según normativa")
     
     # Conceptos
     y -= 8*mm
