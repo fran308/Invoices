@@ -3,14 +3,8 @@
 import streamlit as st
 from datetime import datetime
 import os
-import json
-import tempfile
-import io
-from reportlab.lib.pagesizes import A4
-from reportlab.lib.units import mm
-from reportlab.pdfgen import canvas
-from reportlab.lib.colors import black, green
-from factura_generador import generar_pdf_factura, eur
+from decimal import Decimal, ROUND_HALF_UP
+from factura_generador import generar_pdf_factura, eur, calcular_iva_preciso, calcular_precio_con_iva
 
 # Configurar la página para móvil
 st.set_page_config(
@@ -107,14 +101,13 @@ with st.form("añadir_concepto"):
     if submitted:
         if descripcion and precio > 0:
             if incluye_iva:
-                # Cálculo de dentro hacia afuera (Desglose del PVP)
-                base_real = round(precio / (1 + iva / 100), 2)
-                iva_real = round(precio - base_real, 2)
+                # ✅ Cálculo preciso según normativa Hacienda
+                base_real, iva_real = calcular_precio_con_iva(precio, iva)
                 precio_final = precio
             else:
-                # Cálculo tradicional
+                # ✅ Cálculo preciso según normativa Hacienda
                 base_real = precio
-                iva_real = round(precio * iva / 100, 2)
+                iva_real = calcular_iva_preciso(precio, iva)
                 precio_final = round(base_real + iva_real, 2)
             
             st.session_state.conceptos.append({
@@ -135,10 +128,20 @@ with st.form("añadir_concepto"):
 if st.session_state.conceptos:
     st.subheader("📋 Conceptos añadidos:")
     
-    # Calcular totales sumando de manera precisa
-    base_imponible = round(sum(c['base'] for c in st.session_state.conceptos), 2)
-    cuota_iva_total = round(sum(c['cuota_iva'] for c in st.session_state.conceptos), 2)
-    total = round(base_imponible + cuota_iva_total, 2)
+    # Calcular totales sumando de manera precisa con Decimal
+    base_imponible_dec = Decimal('0')
+    cuota_iva_total_dec = Decimal('0')
+    total_dec = Decimal('0')
+    
+    for c in st.session_state.conceptos:
+        base_imponible_dec += Decimal(str(c['base']))
+        cuota_iva_total_dec += Decimal(str(c['cuota_iva']))
+        total_dec += Decimal(str(c['precio_con_iva']))
+    
+    # Redondear totales finales a 2 decimales
+    base_imponible = float(base_imponible_dec.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
+    cuota_iva_total = float(cuota_iva_total_dec.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
+    total = float(total_dec.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
     
     # Tabla de conceptos en Streamlit
     for idx, concepto in enumerate(st.session_state.conceptos):
@@ -148,7 +151,7 @@ if st.session_state.conceptos:
         with cols[1]:
             st.write(eur(concepto['base']))
         with cols[2]:
-            st.write(f"{concepto['iva']:.0f}%")
+            st.write(f"{concepto['iva']:.1f}%")
         with cols[3]:
             st.write(eur(concepto['cuota_iva']))
         with cols[4]:
