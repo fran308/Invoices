@@ -91,9 +91,23 @@ with st.form("añadir_concepto"):
     with col1:
         descripcion = st.text_input("Descripción", key="desc_input")
     with col2:
-        precio = st.number_input("Precio (€)", min_value=0.0, step=0.01, format="%.2f", key="precio_input")
+        # ✅ CAMBIO IMPORTANTE: step=1.0 para que suba/baje de euro en euro
+        precio = st.number_input(
+            "Precio (€)", 
+            min_value=0.0, 
+            step=1.0,  # ← ANTES: step=0.01, AHORA: step=1.0
+            format="%.2f", 
+            key="precio_input"
+        )
     with col3:
-        iva = st.number_input("IVA (%)", min_value=0.0, max_value=100.0, value=21.0, step=1.0, key="iva_input")
+        iva = st.number_input(
+            "IVA (%)", 
+            min_value=0.0, 
+            max_value=100.0, 
+            value=21.0, 
+            step=1.0,  # Este ya estaba bien (sube/baja de 1 en 1)
+            key="iva_input"
+        )
     
     incluye_iva = st.checkbox("El precio YA incluye el IVA", value=False, key="incluye_iva")
     
