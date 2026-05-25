@@ -6,12 +6,84 @@ import os
 from decimal import Decimal, ROUND_HALF_UP
 from factura_generador import generar_pdf_factura, eur, calcular_iva_preciso, calcular_precio_con_iva
 
+import streamlit_authenticator as stauth
+
+# =========================================================
+# PAGE CONFIG
+# =========================================================
+
 # Configurar la página para móvil
 st.set_page_config(
     page_title="Facturación Simple",
     page_icon="📄",
     layout="centered"
 )
+
+# =========================================================
+# AUTHENTICATION
+# =========================================================
+
+config = {
+    "credentials": {
+        "usernames": {
+            "fran": {
+                "email": "fran@ojoveterinario.es",
+                "name": "Fran",
+                "password": st.secrets["usernames"]["fran"]["password"]
+            },
+            "contacto": {
+                "email": "vicstart@hotmail.co.uk",
+                "name": "Vicki",
+                "password": st.secrets["usernames"]["contacto"]["password"]
+            }
+        }
+    },
+    "cookie": {
+        "expiry_days": st.secrets["cookie_expiry_days"],
+        "key": st.secrets["cookie_key"],
+        "name": st.secrets["cookie_name"]
+    },
+    "preauthorized": {
+        "emails": []
+    }
+}
+
+authenticator = stauth.Authenticate(
+    config["credentials"],
+    config["cookie"]["name"],
+    config["cookie"]["key"],
+    config["cookie"]["expiry_days"]
+)
+
+authenticator.login(location="main")
+
+if st.session_state["authentication_status"]:
+
+    st.sidebar.success(
+        f"✅ Welcome {st.session_state['name']}"
+    )
+
+    authenticator.logout(
+        "Log off",
+        location="sidebar"
+    )
+
+elif st.session_state["authentication_status"] is False:
+
+    st.error("❌ Incorrect")
+    st.stop()
+
+elif st.session_state["authentication_status"] is None:
+
+    st.title("🔐 By Victoria Jane Facturas")
+    st.caption("Generador de facturas")
+    st.warning("Introduce user and password")
+    st.stop()
+
+username = st.session_state["username"]
+
+
+
 
 # Cargar datos del emisor desde secrets
 try:
