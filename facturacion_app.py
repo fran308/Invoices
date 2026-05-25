@@ -70,7 +70,7 @@ elif st.session_state.get("authentication_status") is False:
 
 elif st.session_state.get("authentication_status") is None:
     st.title("🔐 By Victoria Jane Facturas")
-    st.caption("Generador de facturas")
+    st.caption("Facturas Generator")
     st.warning("Introduce user and password")
     st.stop()  # <-- Stops the app from showing here
 
@@ -98,7 +98,7 @@ if 'conceptos' not in st.session_state:
     st.session_state.conceptos = []
 
 # Título
-st.title("📄 Generador de Facturas")
+st.title("📄 Facturas Generator")
 st.markdown("---")
 
 # Selección de tipo de factura
