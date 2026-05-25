@@ -249,7 +249,7 @@ if st.session_state.conceptos:
     
     st.markdown("---")
     
-    if st.button("📄 Generar Factura", type="primary", use_container_width=True):
+    if st.button("📄 Create Factura", type="primary", use_container_width=True):
         error = False
         if not numero_factura:
             st.error("❌ El número de factura es obligatorio")
@@ -299,7 +299,7 @@ if st.session_state.conceptos:
                     pdf_bytes = f.read()
                 
                 st.download_button(
-                    label="📥 Descargar Factura PDF",
+                    label="📥 Download Factura PDF",
                     data=pdf_bytes,
                     file_name=f"factura_{numero_factura.replace('/', '_')}.pdf",
                     mime="application/pdf",
