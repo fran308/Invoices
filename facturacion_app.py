@@ -34,7 +34,7 @@ config = {
             "contacto": {
                 "email": "vicstart@hotmail.co.uk",
                 "name": "Vicki",
-                "password": st.secrets["usernames"]["contacto"]["password"]
+                "password": st.secrets["usernames"]["vicki"]["password"]
             }
         }
     },
