@@ -13,7 +13,7 @@ import streamlit_authenticator as stauth
 # =========================================================
 
 # Configurar la página para móvil
-st.set_page_config(#facturacion_app.py
+st.set_page_config(#facturacion_app.py)
 
 import streamlit as st
 from datetime import datetime
