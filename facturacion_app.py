@@ -135,8 +135,8 @@ if tipo_factura == "Completa":
     st.info("ℹ️ Los datos del cliente son necesarios para cumplir con la normativa fiscal. Se almacenarán únicamente en la factura generada.")
 else:
     # Factura simplificada - campos opcionales pero NO se mostrarán en el PDF
-    st.markdown("✅ **Factura simplificada - No se requieren datos del cliente**")
-    st.caption("Según normativa española, las facturas simplificadas (tickets) no requieren identificación del cliente")
+    st.markdown("✅ **Factura simplificada - Client data not necessary**")
+    st.caption("Under Spanish regulations, facturas simplificadas do not require client identification")
     
     # Estos campos existen pero no se usarán en el PDF
     cliente = ""
@@ -144,20 +144,20 @@ else:
     direccion_cliente = ""
     
     # Mostrar un mensaje informativo
-    st.info("📋 Al generar la factura simplificada, NO aparecerán los datos del cliente en el PDF, cumpliendo con la normativa de protección de datos y facturación.")
+    st.info("📋 When the factura is generated, client data will NOT appear in the PDF")
 
 # Estado de pago
-pagada = st.checkbox("¿Factura pagada?", value=False)
+pagada = st.checkbox("¿Has this factura been paid already?", value=False)
 
 st.markdown("---")
 
 # Gestión de conceptos
-st.subheader("📝 Conceptos")
+st.subheader("📝 Items (conceptos)")
 
 with st.form("añadir_concepto"):
     col1, col2, col3 = st.columns([2, 1, 1])
     with col1:
-        descripcion = st.text_input("Descripción", key="desc_input")
+        descripcion = st.text_input("Description", key="desc_input")
     with col2:
         precio = st.number_input(
             "Precio (€)", 
@@ -176,9 +176,9 @@ with st.form("añadir_concepto"):
             key="iva_input"
         )
     
-    incluye_iva = st.checkbox("El precio YA incluye el IVA", value=True, key="incluye_iva")
+    incluye_iva = st.checkbox("The price already includes IVA", value=True, key="incluye_iva")
     
-    submitted = st.form_submit_button("➕ Añadir concepto")
+    submitted = st.form_submit_button("➕ Add item")
     if submitted:
         if descripcion and precio > 0:
             if incluye_iva:
@@ -201,11 +201,11 @@ with st.form("añadir_concepto"):
             st.success(f"✓ Añadido: {descripcion}")
             st.rerun()
         else:
-            st.error("❌ Descripción y precio son obligatorios")
+            st.error("❌ Descrition and price are mandatory")
 
 # Mostrar conceptos añadidos
 if st.session_state.conceptos:
-    st.subheader("📋 Conceptos añadidos:")
+    st.subheader("📋 Added items (conceptos):")
     
     base_imponible_dec = Decimal('0')
     cuota_iva_total_dec = Decimal('0')
@@ -255,10 +255,10 @@ if st.session_state.conceptos:
             st.error("❌ El número de factura es obligatorio")
             error = True
         elif tipo_factura == "Completa" and (not cliente or not nif_cliente or not direccion_cliente):
-            st.error("❌ Para factura completa, TODOS los datos del cliente son obligatorios")
+            st.error("❌ For factura completa, ALL client data are mandatory")
             error = True
         elif not st.session_state.conceptos:
-            st.error("❌ Debe añadir al menos un concepto")
+            st.error("❌ Please add at least one item")
             error = True
         
         if not error:
@@ -318,9 +318,9 @@ if st.session_state.conceptos:
             except Exception as e:
                 st.error(f"❌ Error al generar la factura: {str(e)}")
 else:
-    st.info("➕ Añade al menos un concepto para generar la factura")
+    st.info("➕ Add at least one item to generate the factura")
 
-if st.button("🔄 Limpiar todos los conceptos", use_container_width=True):
+if st.button("🔄 Clean all items", use_container_width=True):
     st.session_state.conceptos = []
     st.rerun()
 
