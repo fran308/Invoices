@@ -176,7 +176,7 @@ with st.form("añadir_concepto"):
             key="iva_input"
         )
     
-    incluye_iva = st.checkbox("El precio YA incluye el IVA", value=False, key="incluye_iva")
+    incluye_iva = st.checkbox("El precio YA incluye el IVA", value=True, key="incluye_iva")
     
     submitted = st.form_submit_button("➕ Añadir concepto")
     if submitted:
