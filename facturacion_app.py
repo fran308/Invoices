@@ -14,7 +14,7 @@ import streamlit_authenticator as stauth
 
 # Configurar la página para móvil
 st.set_page_config(
-    page_title="Facturación Simple",
+    page_title="Facturas Generador",
     page_icon="📄",
     layout="centered"
 )
