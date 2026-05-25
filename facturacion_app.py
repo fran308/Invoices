@@ -38,6 +38,14 @@ config = {
             }
         }
     },
+
+    # Debug: Print all available secrets keys
+st.write("Available secrets keys:", list(st.secrets.keys()))
+if "cookie_expiry_days" in st.secrets:
+    st.write("Found cookie_expiry_days:", st.secrets["cookie_expiry_days"])
+else:
+    st.error("cookie_expiry_days NOT found in secrets!")
+
     "cookie": {
         "expiry_days": st.secrets["cookie_expiry_days"],
         "key": st.secrets["cookie_key"],
