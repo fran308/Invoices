@@ -39,9 +39,9 @@ config = {
         }
     },
     "cookie": {
-        "expiry_days": st.secrets["cookie_expiry_days"],
-        "key": st.secrets["cookie_key"],
-        "name": st.secrets["cookie_name"]
+        "expiry_days": st.secrets["auth"]["cookie_expiry_days"],
+        "key": st.secrets["auth"]["cookie_key"],
+        "name": st.secrets["auth"]["cookie_name"]
     },
     "preauthorized": {
         "emails": []
